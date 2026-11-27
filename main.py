@@ -1,111 +1,96 @@
+"""
+University Scholarship Allocation
+Evaluates applicants by aggregate marks, subject minimums, attendance,
+and annual family income; ranks eligible applicants with tie-break rules.
+"""
 
-        if result["violations"]:
-            summary["violations"] += 1
+MIN_AGGREGATE = 75.0
+MIN_SUBJECT_MARK = 60.0
+MIN_ATTENDANCE = 75.0
+MAX_ANNUAL_INCOME = 250000.0
+SUBJECTS = ["English", "Mathematics", "Science", "Computer", "Social Studies"]
 
-    for floor, summary in floors.items():
-        if summary["electricity_limit_total"] > 0:
-            summary["electricity_utilization"] = (
-                summary["electricity"] / summary["electricity_limit_total"] * 100
-            )
+# Marks are out of 100; income is annual family income.
+applicants = [
+    {"student_id": "U101", "name": "Aarav", "marks": [88, 92, 85, 90, 87], "attendance": 92, "income": 180000},
+    {"student_id": "U102", "name": "Diya", "marks": [90, 90, 90, 90, 90], "attendance": 95, "income": 200000},
+    {"student_id": "U103", "name": "Ishita", "marks": [78, 82, 75, 80, 85], "attendance": 88, "income": 150000},
+    {"student_id": "U104", "name": "Kabir", "marks": [95, 58, 90, 92, 91], "attendance": 96, "income": 120000},
+    {"student_id": "U105", "name": "Meera", "marks": [80, 82, 78, 85, 80], "attendance": 72, "income": 100000},
+    {"student_id": "U106", "name": "Rohan", "marks": [85, 85, 85, 85, 85], "attendance": 90, "income": 300000},
+    {"student_id": "U107", "name": "Sara", "marks": [88, 92, 85, 90, 87], "attendance": 92, "income": 160000},
+]
+
+
+def validate_applicants(records):
+    errors = []
+    seen_ids = set()
+
+    if not records:
+        return ["No applicant records were provided."]
+
+    for applicant in records:
+        sid = applicant.get("student_id")
+        if not sid:
+            errors.append("Missing student ID.")
+        elif sid in seen_ids:
+            errors.append("Duplicate student ID: " + str(sid))
         else:
-            summary["electricity_utilization"] = 0
+            seen_ids.add(sid)
 
-        if summary["water_limit_total"] > 0:
-            summary["water_utilization"] = (
-                summary["water"] / summary["water_limit_total"] * 100
-            )
+        if not applicant.get("name"):
+            errors.append("Missing name for student: " + str(sid))
+
+        marks = applicant.get("marks")
+        if not isinstance(marks, list) or len(marks) != len(SUBJECTS):
+            errors.append("Student {} must have exactly {} subject marks.".format(sid, len(SUBJECTS)))
         else:
-            summary["water_utilization"] = 0
+            for mark in marks:
+                if not isinstance(mark, (int, float)) or not 0 <= mark <= 100:
+                    errors.append("Invalid subject mark for student: " + str(sid))
+                    break
 
-    return floors
+        attendance = applicant.get("attendance")
+        if not isinstance(attendance, (int, float)) or not 0 <= attendance <= 100:
+            errors.append("Invalid attendance for student: " + str(sid))
 
+        income = applicant.get("income")
+        if not isinstance(income, (int, float)) or income < 0:
+            errors.append("Invalid annual income for student: " + str(sid))
 
-def display_report(room_results, floor_summary):
-    """Print room details, violations, and floor-wise comparison."""
-    print("\nSMART HOSTEL RESOURCE MONITORING")
-    print("=" * 72)
-    print("Rates: electricity = {:.2f} per kWh; water = {:.2f} per kL".format(
-        ELECTRICITY_RATE, WATER_RATE
-    ))
-    print("Limits per room: electricity = {:.1f} kWh; water = {:.1f} kL".format(
-        ELECTRICITY_LIMIT, WATER_LIMIT
-    ))
-
-    print("\nROOM-WISE REPORT")
-    print("-" * 72)
-
-    for item in room_results:
-        status = ", ".join(item["violations"]) if item["violations"] else "None"
-        print(
-            "Room {} (Floor {}) | Electricity: {:.1f} kWh | Water: {:.1f} kL".format(
-                item["room"], item["floor"], item["electricity"], item["water"]
-            )
-        )
-        print(
-            "  Charges: Electricity = {:.2f}, Water = {:.2f}, Total = {:.2f}".format(
-                item["electricity_charge"],
-                item["water_charge"],
-                item["total_charge"]
-            )
-        )
-        print(
-            "  Threshold use: Electricity = {:.1f}%, Water = {:.1f}%".format(
-                item["electricity_utilization"], item["water_utilization"]
-            )
-        )
-        print("  Threshold violations: {}".format(status))
-
-    print("\nFLOOR-WISE RESOURCE COMPARISON")
-    print("-" * 72)
-
-    highest_electricity_floor = None
-    highest_water_floor = None
-    highest_electricity = -1
-    highest_water = -1
-
-    for floor in sorted(floor_summary):
-        item = floor_summary[floor]
-        print("Floor {} ({} rooms)".format(floor, item["rooms"]))
-        print(
-            "  Electricity: {:.1f} kWh ({:.1f}% of combined room limits)".format(
-                item["electricity"], item["electricity_utilization"]
-            )
-        )
-        print(
-            "  Water: {:.1f} kL ({:.1f}% of combined room limits)".format(
-                item["water"], item["water_utilization"]
-            )
-        )
-        print("  Total charges: {:.2f}".format(item["total_charge"]))
-        print("  Rooms with at least one violation: {}".format(item["violations"]))
-
-        if item["electricity"] > highest_electricity:
-            highest_electricity = item["electricity"]
-            highest_electricity_floor = floor
-
-        if item["water"] > highest_water:
-            highest_water = item["water"]
-            highest_water_floor = floor
-
-    print("\nHIGHLIGHTS")
-    print("Highest electricity consumption: Floor {}".format(highest_electricity_floor))
-    print("Highest water consumption: Floor {}".format(highest_water_floor))
+    return errors
 
 
-def main():
-    errors = validate_data(rooms)
+def evaluate_applicant(applicant):
+    aggregate = sum(applicant["marks"]) / len(applicant["marks"])
+    failed_subjects = []
 
-    if errors:
-        print("DATA VALIDATION FAILED:")
-        for error in errors:
-            print("- " + error)
-        return
+    for index in range(len(applicant["marks"])):
+        if applicant["marks"][index] < MIN_SUBJECT_MARK:
+            failed_subjects.append(SUBJECTS[index])
 
-    room_results = analyse_rooms(rooms)
-    floor_summary = compare_floors(room_results)
-    display_report(room_results, floor_summary)
+    reasons = []
+    if aggregate < MIN_AGGREGATE:
+        reasons.append("Aggregate below {:.1f}%".format(MIN_AGGREGATE))
+    if failed_subjects:
+        reasons.append("Below subject minimum in " + ", ".join(failed_subjects))
+    if applicant["attendance"] < MIN_ATTENDANCE:
+        reasons.append("Attendance below {:.1f}%".format(MIN_ATTENDANCE))
+    if applicant["income"] > MAX_ANNUAL_INCOME:
+        reasons.append("Annual family income exceeds {:.0f}".format(MAX_ANNUAL_INCOME))
+
+    return {
+        "student_id": applicant["student_id"],
+        "name": applicant["name"],
+        "aggregate": aggregate,
+        "attendance": applicant["attendance"],
+        "income": applicant["income"],
+        "eligible": len(reasons) == 0,
+        "reasons": reasons
+    }
 
 
-if __name__ == "__main__":
-    main()
-
+def rank_eligible_applicants(eligible):
+    # Higher aggregate, higher attendance, lower income, then student ID.
+    return sorted(
+        eligible,
